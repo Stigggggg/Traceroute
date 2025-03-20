@@ -4,38 +4,48 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <netinet/in.h>
+#include <netinet/ip_icmp.h>
+#include <unistd.h>
+#include <poll.h>
 
-
-void ERROR(const char* str)
-{
+void ERROR(const char* str) {
     fprintf(stderr, "%s: %s\n", str, strerror(errno));  // NOLINT(*-err33-c)
     exit(EXIT_FAILURE);
 }
 
-
-void print_as_bytes (unsigned char* buff, ssize_t length)
-{
+void print_as_bytes (unsigned char* buff, ssize_t length) {
     for (ssize_t i = 0; i < length; i++, buff++)
         printf("%.2x ", *buff);
 }
 
-
-int main()
-{
-    int sock_fd = socket(AF_INET, SOCK_RAW, IPPROTO_ICMP); //nowy socket jako deskryptor pliku
+void receive_icmp() {
+    int sockfd = socket(AF_INET, SOCK_RAW, IPPROTO_ICMP); //nowy socket jako deskryptor pliku
     //AF_INET - IPv4, SOCK_RAW - surowe gniazdo, IPPROTO_ICMP - definiujemy protokół jako ICMP
-    if (sock_fd < 0)
+    if (sockfd < 0)
         ERROR("socket error");
-    for (;;) {
+    struct pollfd ps; //uzupełniamy pola pollfd jak na wykładzie
+    ps.fd = sockfd; 
+    ps.events = POLLIN;
+    ps.revents = 0;
+    int ready = poll(&ps, 1, 1000);
+    if (ready < 0) {
+        ERROR("Błąd poll!");
+    } else if (ready == 0) {
+        printf("Timeout!");
+        return;
+    }
+    for (int i = 0; i < 3; i++) {
         struct sockaddr_in sender; //struct opisujący adres wysyłającego
         socklen_t sender_len = sizeof(sender); //długość adresu
         u_int8_t buffer[IP_MAXPACKET]; //bufor, w którym znajdzie się adres
-        ssize_t packet_len = recvfrom(sock_fd, buffer, IP_MAXPACKET, 0, (struct sockaddr*)&sender, &sender_len);
+        ssize_t packet_len = recvfrom(sockfd, buffer, IP_MAXPACKET, 0, (struct sockaddr*)&sender, &sender_len);
         //odbieranie pakietu z danego gniazda do danego bufora 
         if (packet_len < 0)
             ERROR("recvfrom error");
         char sender_ip_str[20];
-        inet_ntop(AF_INET, &(sender.sin_addr), sender_ip_str, sizeof(sender_ip_str)); //zamiana adresu IP z postaci bajtowej na postać CIDR
+        inet_ntop(AF_INET, &(sender.sin_addr), sender_ip_str, sizeof(sender_ip_str)); 
+        //zamiana adresu IP z postaci bajtowej na postać CIDR
         printf("Received IP packet with ICMP content from: %s\n", sender_ip_str);
         struct ip* ip_header = (struct ip*) buffer;
         ssize_t	ip_header_len = 4 * (ssize_t)(ip_header->ip_hl);
@@ -46,4 +56,9 @@ int main()
         print_as_bytes(buffer + ip_header_len, packet_len - ip_header_len);
         printf("\n\n");
     }
+    close(sockfd);
 }
+
+// int main() {
+//     receive_icmp();
+// }
