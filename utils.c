@@ -7,6 +7,7 @@
 #include <sys/time.h>
 #include "utils.h"
 
+//funkcje z wykładu i pomocnicza będąca wrapperem czasu
 u_int16_t compute_icmp_checksum(const void *buff, int length)
 {
     const u_int16_t* ptr = buff;

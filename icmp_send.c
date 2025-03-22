@@ -27,13 +27,17 @@ void send_icmp(const char *dest, int ttl) {
        ERROR("Błąd ustawienia TTL!");
     }
     for (int i = 0; i < 3; i++) {
-        struct icmp header; //konstruujemy nagłówek do wysłania komunikatu ICMP
+        //konstruujemy nagłówek do wysłania komunikatu ICMP
+        struct icmp header;
         header.icmp_type = ICMP_ECHO;
         header.icmp_code = 0;
-        header.icmp_hun.ih_idseq.icd_id = getpid() & 0xFFFF; //jak na wykładzie, 16 najmniej znaczących bitów PID
-        header.icmp_hun.ih_idseq.icd_seq = ttl * 100 + i; //żeby się odróżniało
+        //jak na wykładzie, 16 najmniej znaczących bitów PID
+        header.icmp_hun.ih_idseq.icd_id = getpid() & 0xFFFF;
+        //żeby się odróżniało
+        header.icmp_hun.ih_idseq.icd_seq = ttl * 100 + i; 
         header.icmp_cksum = 0; 
         header.icmp_cksum = compute_icmp_checksum((u_int16_t*)&header, sizeof(header));
+        //wysyłamy
         ssize_t bytes_sent = sendto(sockfd, &header, sizeof(header), 0, (struct sockaddr*)&recipient, sizeof(recipient));
         if (bytes_sent < 0) {
             ERROR("Błąd wysłania pakietu!");
@@ -41,18 +45,6 @@ void send_icmp(const char *dest, int ttl) {
     }
     close(sockfd);
 }
-
-// int main(int argc, char *argv[]) {
-//     if (argc != 2) {
-//         printf("Musisz podać adres IP!\n");
-//         return -1;
-//     }
-//     for (int i = 1; i <= 30; i++) {
-//         send_icmp(argv[1], i);
-//         printf("Pomyślnie wysłano: %d\n", i);
-//     }
-//     return 0;
-// }
 
 
 
