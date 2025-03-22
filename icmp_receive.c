@@ -36,9 +36,7 @@ void receive_icmp(const char *addr, int ttl) {
         if (ready < 0) {
             ERROR("Błąd poll!");
         } else if (ready == 0) {
-            printf("%d. *\n", ttl);
-            close(sockfd);
-            return;
+            break;
         }
         //struct opisujący adres wysyłającego
         struct sockaddr_in sender; 
@@ -52,22 +50,6 @@ void receive_icmp(const char *addr, int ttl) {
             }
             ERROR("Błąd recvfrom!");
         }
-        char sender_ip[20];
-        //zamiana adresu IP z postaci bajtowej na postać CIDR
-        inet_ntop(AF_INET, &(sender.sin_addr), sender_ip, sizeof(sender_ip));
-        //zapobieganie powtarzaniu się IP przy wypisywaniu 
-        int is_duplicate = 0;
-        for (int j = 0; j < unique_ips; j++) {
-            if (strcmp(sender_ip_str[j], sender_ip) == 0) {
-                is_duplicate = 1;
-                break;
-            }
-        }
-        if (is_duplicate == 1) {
-            continue;
-        }
-        strcpy(sender_ip_str[unique_ips], sender_ip);
-        unique_ips++;
         //pobieranie nagłówka IP z bufora
         struct ip *ip_header = (struct ip*) buffer;
         ssize_t ip_header_len = 4 * (ssize_t)(ip_header->ip_hl);
@@ -77,40 +59,53 @@ void receive_icmp(const char *addr, int ttl) {
         //obsługa ECHOREPLY
         if (icmp_header->icmp_type == ICMP_ECHOREPLY && icmp_header->icmp_hun.ih_idseq.icd_id == (getpid() & 0xFFFF) && icmp_header->icmp_hun.ih_idseq.icd_seq / 100 == ttl) {
             valid = 1;
+            // printf("valid\n");
         } else if(icmp_header->icmp_type == ICMP_TIME_EXCEEDED) { //obsługa TIME EXCEEDED
-            struct ip *inner = (struct ip *)&icmp_header->icmp_data;
-            u_int8_t *inner_header = icmp_header->icmp_data + 4 * inner->ip_hl;
+            struct ip *inner = (struct ip *)&icmp_header->icmp_data; //original ip header
+            u_int8_t *inner_header = icmp_header->icmp_data + 4 * inner->ip_hl; 
             struct icmp *inner_icmp = (struct icmp *)inner_header;
             if (inner_icmp->icmp_hun.ih_idseq.icd_id == (getpid() & 0xFFFF) && inner_icmp->icmp_hun.ih_idseq.icd_seq / 100 == ttl) {
                 valid = 1;
+                // printf("haha\n");
             }
         }
         //jeśli pakiet jest ok, to zliczamy go, liczymy mu rtt
         if (valid == 1) {
+            // printf("valid\n");
             long long time_r = get_current_time_ms() - start;
             rtt_times[received] = time_r;
             received++;
+            char sender_ip[20];
+            //zamiana adresu IP z postaci bajtowej na postać CIDR
+            inet_ntop(AF_INET, &(sender.sin_addr), sender_ip, sizeof(sender_ip));
+            //zapobieganie powtarzaniu się IP przy wypisywaniu 
+            int is_duplicate = 0;
+            for (int j = 0; j < unique_ips; j++) {
+                if (strcmp(sender_ip_str[j], sender_ip) == 0) {
+                    is_duplicate = 1;
+                    break;
+                }
+            }
+            if (is_duplicate == 1) {
+                continue;
+            }
+            strcpy(sender_ip_str[unique_ips], sender_ip);
+            unique_ips++;
         }
     }
-    //jeśli 0 odebranych to wypisujemy *
-    if (received == 0) {
-        printf("%d. *\n", ttl);
-        return;
-    }
     printf("%d. ", ttl);
-    //IP bez powtórzeń
-    for (int i = 0; i < unique_ips; i++) {
-        printf("%s ", sender_ip_str[i]);
-    }
-    //sumaryczne RTT do średniej
-    long long sum = 0;
-    for (int i = 0; i < received; i++) {
-        sum += rtt_times[i];
-    }
-    if (received > 0) {
-        printf("%lldms\n", sum / received);
+    if (received == 0) {
+        printf("*\n");
     } else {
-        printf("???\n");
+        for (int i = 0; i < unique_ips; i++) {
+            printf("%s ", sender_ip_str[i]);
+        }
+        if (received < 3) {
+            printf("???\n");
+        } else {
+            long long avg_rtt = (rtt_times[0] + rtt_times[1] + rtt_times[2]) / 3;
+            printf("%lldms\n", avg_rtt);
+        }
     }
     //jeśli doszliśmy do celu, to koniec
     if (received > 0 && strcmp(sender_ip_str[0], addr) == 0) {
