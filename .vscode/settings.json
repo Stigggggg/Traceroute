@@ -1,6 +1,10 @@
 {
     "files.associations": {
         "string.h": "c",
-        "stdlib.h": "c"
+        "stdlib.h": "c",
+        "unistd.h": "c",
+        "assert.h": "c",
+        "time.h": "c",
+        "icmp_send.h": "c"
     }
 }
