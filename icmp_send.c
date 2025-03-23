@@ -14,18 +14,22 @@ void send_icmp(const char *dest, int ttl) {
     struct sockaddr_in recipient; //adres gniazda odbierającego
     memset(&recipient, 0, sizeof(recipient));
     recipient.sin_family = AF_INET; //IPv4
+    
     int ip_conversion = inet_pton(AF_INET, dest, &recipient.sin_addr); //konwersja stringa IP na postać binarną
     if (ip_conversion != 1) {
         ERROR("Błąd adresu IP!");
     }
+    
     int sockfd = socket(AF_INET, SOCK_RAW, IPPROTO_ICMP); //gniazdo wysyłające
     if (sockfd < 0) {
         ERROR("Błąd gniazda!");
     }
+    
     int ttl_change = setsockopt(sockfd, IPPROTO_IP, IP_TTL, &ttl, sizeof(int)); //konwersja TTL jak na wykładzie
     if (ttl_change < 0) {
        ERROR("Błąd ustawienia TTL!");
     }
+    
     for (int i = 0; i < 3; i++) {
         //konstruujemy nagłówek do wysłania komunikatu ICMP
         struct icmp header;
@@ -43,6 +47,7 @@ void send_icmp(const char *dest, int ttl) {
             ERROR("Błąd wysłania pakietu!");
         }
     }
+    
     close(sockfd);
 }
 

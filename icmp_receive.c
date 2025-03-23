@@ -19,25 +19,30 @@ void receive_icmp(const char *addr, int ttl) {
     if (sockfd < 0) {
         ERROR("Błąd gniazda przy odbieraniu!");
     }
+    
     //uzupełniamy pola pollfd jak na wykładzie
     struct pollfd ps;
     ps.fd = sockfd; 
     ps.events = POLLIN;
     ps.revents = 0;
+
+    //preprocessing, istotne zmienne
     int received = 0;
-    long long rtt_times[3] = {0};
+    double rtt_times[3]; //czasy do średniej
     int unique_ips = 0;
-    char sender_ip_str[3][20];
-    long long start = get_current_time_ms();
-    long long deadline = start + 1000;
+    char sender_ip_str[3][20]; //trzymanie IP do wypisania
+    double start_time = get_time();
+    double end_time = start_time + 1000; //mamy sekundę na odbiór sygnału
+    
     for (int i = 0; i < 3; i++) {
-        long long time_left = deadline - get_current_time_ms();
+        double time_left = end_time - get_time();
         int ready = poll(&ps, 1, time_left);
         if (ready < 0) {
             ERROR("Błąd poll!");
         } else if (ready == 0) {
             break;
         }
+        
         //struct opisujący adres wysyłającego
         struct sockaddr_in sender; 
         socklen_t sender_len = sizeof(sender);
@@ -50,18 +55,20 @@ void receive_icmp(const char *addr, int ttl) {
             }
             ERROR("Błąd recvfrom!");
         }
+        
         //pobieranie nagłówka IP z bufora
         struct ip *ip_header = (struct ip*) buffer;
         ssize_t ip_header_len = 4 * (ssize_t)(ip_header->ip_hl);
         //pobieranie nagłówka ICMP
         struct icmp *icmp_header = (struct icmp*)(buffer + ip_header_len);
+        
         int valid = 0;
         //obsługa ECHOREPLY
         if (icmp_header->icmp_type == ICMP_ECHOREPLY && icmp_header->icmp_hun.ih_idseq.icd_id == (getpid() & 0xFFFF) && icmp_header->icmp_hun.ih_idseq.icd_seq / 100 == ttl) {
             valid = 1;
             // printf("valid\n");
         } else if(icmp_header->icmp_type == ICMP_TIME_EXCEEDED) { //obsługa TIME EXCEEDED
-            struct ip *inner = (struct ip *)&icmp_header->icmp_data; //original ip header
+            struct ip *inner = (struct ip *)&icmp_header->icmp_data;
             u_int8_t *inner_header = icmp_header->icmp_data + 4 * inner->ip_hl; 
             struct icmp *inner_icmp = (struct icmp *)inner_header;
             if (inner_icmp->icmp_hun.ih_idseq.icd_id == (getpid() & 0xFFFF) && inner_icmp->icmp_hun.ih_idseq.icd_seq / 100 == ttl) {
@@ -69,10 +76,11 @@ void receive_icmp(const char *addr, int ttl) {
                 // printf("haha\n");
             }
         }
+
         //jeśli pakiet jest ok, to zliczamy go, liczymy mu rtt
         if (valid == 1) {
             // printf("valid\n");
-            long long time_r = get_current_time_ms() - start;
+            double time_r = get_time() - start_time;
             rtt_times[received] = time_r;
             received++;
             char sender_ip[20];
@@ -93,6 +101,8 @@ void receive_icmp(const char *addr, int ttl) {
             unique_ips++;
         }
     }
+    
+    //obsługa outputu
     printf("%d. ", ttl);
     if (received == 0) {
         printf("*\n");
@@ -103,10 +113,11 @@ void receive_icmp(const char *addr, int ttl) {
         if (received < 3) {
             printf("???\n");
         } else {
-            long long avg_rtt = (rtt_times[0] + rtt_times[1] + rtt_times[2]) / 3;
-            printf("%lldms\n", avg_rtt);
+            double avg = (rtt_times[0] + rtt_times[1] + rtt_times[2]) / 3;
+            printf("%.3fms\n", avg);
         }
     }
+    
     //jeśli doszliśmy do celu, to koniec
     if (received > 0 && strcmp(sender_ip_str[0], addr) == 0) {
         exit(0);
